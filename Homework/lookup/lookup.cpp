@@ -1,6 +1,8 @@
 #include "router.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <vector>
+#include <sstream>
 
 /*
   RoutingTable Entry 的定义如下：
@@ -17,6 +19,7 @@
   当 nexthop 为零时这是一条直连路由。
   你可以在全局变量中把路由表以一定的数据结构格式保存下来。
 */
+std::vector<RoutingTableEntry> routers;
 
 /**
  * @brief 插入/删除一条路由表表项
@@ -27,7 +30,27 @@
  * 删除时按照 addr 和 len 匹配。
  */
 void update(bool insert, RoutingTableEntry entry) {
-  // TODO:
+  int index = -1;
+  for (int i=0; i<routers.size(); i++) {
+    if (routers.at(i).addr == entry.addr && routers.at(i).len == entry.len) {
+      index = i;
+    }
+  }
+  if (insert) {
+    if (index != -1) {
+      routers.at(index) = entry;
+    } else {
+      routers.push_back(entry);
+    }
+  } else {
+    if (index != -1) routers.erase(routers.begin() + index);
+  }
+}
+
+std::string toHex(int addr) {
+  std::stringstream ss;
+  ss << std::hex << addr;
+  return ss.str();
 }
 
 /**
@@ -38,8 +61,20 @@ void update(bool insert, RoutingTableEntry entry) {
  * @return 查到则返回 true ，没查到则返回 false
  */
 bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index) {
-  // TODO:
-  *nexthop = 0;
-  *if_index = 0;
-  return false;
+  std::string addr_str = toHex((int)addr);
+  int max = -1, max_i = -1;
+  for (int i=0; i<routers.size(); i++) {
+    std::string tmp = toHex((int)routers.at(i).addr);
+    if (addr_str.find(tmp) != -1 && max < (int)tmp.size()) {
+      max = tmp.length();
+      max_i = i;
+    }
+  }
+  if (max_i != -1) {
+    *nexthop = routers.at(max_i).nexthop;
+    *if_index = routers.at(max_i).if_index;
+    return true;
+  } else {
+    return false;
+  }
 }
