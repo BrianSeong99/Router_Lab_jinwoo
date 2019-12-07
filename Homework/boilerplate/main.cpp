@@ -22,6 +22,8 @@ extern unsigned short getChecksum(uint8_t *packet, int start, int end);
 extern void setupIPPacket(uint8_t *packet);
 extern void setupICMPPacket(uint8_t *output, uint8_t *packet);
 
+macaddr_t multicast_addr = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x16};
+
 uint8_t packet[2048];
 uint8_t output[2048];
 // 0: 10.0.0.1
@@ -68,7 +70,6 @@ int main(int argc, char *argv[]) {
     macaddr_t src_mac;
     macaddr_t dst_mac;
     int if_index;
-    // TODO check src_mac and dst_mac
     res = HAL_ReceiveIPPacket(mask, packet, sizeof(packet), src_mac,
                                   dst_mac, 1000, &if_index);
     if (res == HAL_ERR_EOF) {
@@ -244,7 +245,7 @@ int main(int argc, char *argv[]) {
                 answer = getChecksum(output, 8, 8+12+8+rip_len);
                 output[26] = answer >> 8;
                 output[27] = answer;
-                HAL_SendIPPacket(i, output, rip_len + 20 + 8, dst_mac);
+                HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_addr);
               }
             }
           }
@@ -278,10 +279,8 @@ int main(int argc, char *argv[]) {
             answer = getChecksum(output, 8, 8+12+8+rip_len);
             output[26] = answer >> 8;
             output[27] = answer;
-            HAL_SendIPPacket(i, output, rip_len + 20 + 8, dst_mac);
+            HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_addr);
           }
-
-          
         }
       } else {
         // forward
