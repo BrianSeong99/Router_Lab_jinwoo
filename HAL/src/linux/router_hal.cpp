@@ -36,6 +36,10 @@ std::map<std::pair<in_addr_t, int>, macaddr_t> arp_table;
 std::map<std::pair<in_addr_t, int>, uint64_t> arp_timer;
 
 extern "C" {
+
+/**
+ * Getting the local gateway information, and store it. 
+ */
 int HAL_Init(int debug, in_addr_t if_addrs[N_IFACE_ON_BOARD]) {
   if (inited) {
     return 0;
@@ -44,6 +48,11 @@ int HAL_Init(int debug, in_addr_t if_addrs[N_IFACE_ON_BOARD]) {
 
   // find matching interfaces and get their MAC address
   struct ifaddrs *ifaddr, *ifa;
+  /**
+   * The getifaddrs() function creates a linked list of structures describing the
+       network interfaces of the local system, and stores the address of the first
+       item of the list in *ifap.
+   */ 
   if (getifaddrs(&ifaddr) < 0) {
     if (debugEnabled) {
       fprintf(stderr, "HAL_Init: getifaddrs failed with %s\n", strerror(errno));
@@ -76,6 +85,13 @@ int HAL_Init(int debug, in_addr_t if_addrs[N_IFACE_ON_BOARD]) {
   // init pcap handles
   char error_buffer[PCAP_ERRBUF_SIZE];
   for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
+    /**
+     * 从网络打开实时捕获。pcap_open_live()用于获取数据包捕获描述符以查看网络上的数据包。
+     * @device  - 指定网络接口名，比如"eth0"。如果传入NULL或"any"，则意味着对所有接口进行捕获
+     * @snaplen - 设置每个数据包的捕捉长度，上限MAXIMUM_SNAPLEN
+     * @promisc - 是否打开混杂模式
+     * @to_ms   - 设置获取数据包时的超时时间(ms)
+     */
     pcap_in_handles[i] =
         pcap_open_live(interfaces[i], BUFSIZ, 1, 1, error_buffer);
     if (pcap_in_handles[i]) {
@@ -100,6 +116,7 @@ int HAL_Init(int debug, in_addr_t if_addrs[N_IFACE_ON_BOARD]) {
 
   inited = true;
   // send igmp to join RIP multicast group
+  // igmp == Internet Group Management Protocol
   for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
     if (pcap_out_handles[i]) {
       HAL_JoinIGMPGroup(i, if_addrs[i]);
@@ -291,10 +308,10 @@ int HAL_ReceiveIPPacket(int if_index_mask, uint8_t *buffer, size_t length,
         buffer[19] = 0x04;
         // opcode
         buffer[21] = 0x02;
-        // sender
+        // sender (Our computer)
         memcpy(&buffer[22], mac, sizeof(macaddr_t));
         memcpy(&buffer[28], &dst_ip, sizeof(in_addr_t));
-        // target
+        // target (target router)
         memcpy(&buffer[32], &packet[22], sizeof(macaddr_t));
         memcpy(&buffer[38], &packet[28], sizeof(in_addr_t));
 

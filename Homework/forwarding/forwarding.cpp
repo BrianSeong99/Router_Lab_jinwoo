@@ -40,9 +40,64 @@ bool forward(uint8_t *packet, size_t len) {
 
   sum = (sum & 0xffff) + (sum >> 16);
   sum += (sum >> 16);
-  sum = ~sum;
-  packet[10] = sum >> 8;
-  packet[11] = sum;
+  unsigned short answer = ~sum;
+  if (answer == 0x0000) {
+    packet[10] = sum >> 8;
+    packet[11] = sum;
+    return true;
+  } else {
+    packet[10] = 0x00;
+    packet[11] = 0x00;
+    return false;
+  }
+}
 
-  return true;
+
+void setupIPPacket(uint8_t *packet) {
+  // assemble
+  // IP
+  output[0] = 0x45;
+
+  // Differentiated Service Field
+  output[1] = 0x00;
+  
+  // Identification
+  output[4] = 0x00;
+  output[5] = 0x00;
+  
+  // Flags
+  output[6] = 0x00;
+  output[7] = 0x00;
+
+  // TTL (Time to Live)
+  output[8] = 0x01;
+
+  // Protocol
+  output[9] = 0x11;
+
+  // UDP
+  // port = 520 (source)
+  output[20] = 0x02;
+  output[21] = 0x08;
+
+  // port = 520 (dest)
+  output[22] = 0x02;
+  output[23] = 0x08;
+}
+
+void setupICMPPacket(uint8_t *output, uint8_t *packet) {
+  // ICMP checksum
+  output[2] = 0x00;
+  output[3] = 0x00;
+
+  // no use
+  output[4] = 0x00;
+  output[5] = 0x00;
+  output[6] = 0x00;
+  output[7] = 0x00;
+
+  // IP head + 64 bits of data
+  for (int i=0; i<28; i++) {
+    output[i+8] = packet[i];
+  }
 }

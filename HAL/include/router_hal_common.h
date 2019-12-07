@@ -20,7 +20,7 @@ void HAL_JoinIGMPGroup(int if_index, in_addr_t ip) {
       0x00, 0x01,             // One Group Record
       0x04,                   // Record Type
       0x00, 0x00, 0x00,       // Zeros
-      0xe0, 0x00, 0x00, 0x09  // RIP Multicast
+      0xe0, 0x00, 0x00, 0x09  // RIP Multicast (224.0.0.9)
   };
   memcpy(&buffer[12], &ip, sizeof(in_addr_t));
   uint32_t ip_chksum = 0;

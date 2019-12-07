@@ -31,6 +31,9 @@ struct macaddr_wrap {
 std::map<std::pair<in_addr_t, int>, macaddr_wrap> arp_table;
 
 extern "C" {
+/**
+ * Getting the local gateway information, and store it. 
+ */
 int HAL_Init(int debug, in_addr_t if_addrs[N_IFACE_ON_BOARD]) {
   if (inited) {
     return 0;

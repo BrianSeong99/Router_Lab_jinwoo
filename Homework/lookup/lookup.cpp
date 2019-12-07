@@ -1,4 +1,5 @@
 #include "router.h"
+#include "rip.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
@@ -60,7 +61,7 @@ std::string toHex(int addr) {
  * @param if_index 如果查询到目标，把表项的 if_index 写入
  * @return 查到则返回 true ，没查到则返回 false
  */
-bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index) {
+bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index, uint32_t *metric) {
   std::string addr_str = toHex((int)addr);
   int max = -1, max_i = -1;
   for (int i=0; i<routers.size(); i++) {
@@ -73,8 +74,63 @@ bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index) {
   if (max_i != -1) {
     *nexthop = routers.at(max_i).nexthop;
     *if_index = routers.at(max_i).if_index;
+    *metric = routers.at(max_i).metric;
     return true;
   } else {
     return false;
   }
+}
+
+std::vector<RoutingTableEntry> getRoutingTable() {
+  return routers;
+}
+
+std::vector<RipEntry> getRipRoutingTable() {
+  std::vector<RipEntry> rips;
+  for (int i=0; i < routers.size(); i++) {
+    rips.at(i).addr = routers.at(i).addr;
+    rips.at(i).mask = __builtin_bswap32 (toEndian(routers.at(i).len));
+    rips.at(i).metric = __builtin_bswap32 (routers.at(i).metric);
+    rips.at(i).nexthop = routers.at(i).nexthop;
+  }
+}
+
+uint32_t toEndian(uint32_t num) {
+  uint32_t tmp = 0;
+  for (uint32_t i=0; i<num; i++) {
+    tmp = tmp<<1 + 1;
+  }
+  tmp = tmp << (32-num);
+  return tmp;
+}
+
+// big endian to digit
+uint32_t toDigit(uint32_t endian) {
+  uint32_t counter = 0;
+  for (int i = 0; i < 32; i++) {
+    if (endian & 0x1 == 1) {
+      counter++;
+      endian = endian >> 1;
+    } else {
+      break;
+    }
+  }
+  return counter;
+}
+
+RoutingTableEntry toRoutingTableEntry(RipEntry rip, uint32_t if_index, uint32_t timestamp) {
+  RoutingTableEntry entry;
+  entry.addr = rip.addr;
+  entry.if_index = if_index;
+  entry.len = toDigit(rip.mask);
+  entry.nexthop = rip.nexthop;
+  entry.timestamp = timestamp;
+}
+
+RipEntry toRipEntry(RoutingTableEntry entry, uint32_t metric) {
+  RipEntry rip;
+  rip.addr = entry.addr;
+  rip.mask = __builtin_bswap32 (toEndian(entry.len));
+  rip.metric = __builtin_bswap32 (uint32_t(metric));
+  rip.nexthop = entry.nexthop;
 }

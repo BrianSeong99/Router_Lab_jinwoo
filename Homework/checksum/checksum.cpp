@@ -26,3 +26,17 @@ bool validateIPChecksum(uint8_t *packet, size_t len) {
   }
   return false;
 }
+
+unsigned short getChecksum(uint8_t *packet, int start, int end) {
+  int sum = 0;
+  for (int i = start; i < end; i++) {
+    if (i % 2 == 0) {
+      sum += ((int) packet[i]) << 8;
+    } else {
+      sum += ((int) packet[i]);
+    }
+  }
+  sum = (sum & 0xffff) + (sum >> 16);
+  sum += (sum >> 16);
+  unsigned short answer = ~sum;
+}
