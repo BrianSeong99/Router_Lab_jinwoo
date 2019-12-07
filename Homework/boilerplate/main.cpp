@@ -22,7 +22,8 @@ extern unsigned short getChecksum(uint8_t *packet, int start, int end);
 extern void setupIPPacket(uint8_t *packet);
 extern void setupICMPPacket(uint8_t *output, uint8_t *packet);
 
-macaddr_t multicast_addr = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x16};
+macaddr_t multicast_mac = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x16}; // 01:00:5e:00:00:09
+in_addr_t multicast_addr = 0x090000e0; // 224.0.0.9
 
 uint8_t packet[2048];
 uint8_t output[2048];
@@ -67,6 +68,55 @@ int main(int argc, char *argv[]) {
       // send complete routing table to every interface
       // ref. RFC2453 3.8
       // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
+      std::vector<RoutingTableEntry> routers = getRoutingTable();
+      RipPacket ripPacket_o;
+      ripPacket_o.numEntries = routers.size();
+      ripPacket_o.command = 2;
+      for (int i=0; i<ripPacket_o.numEntries; i++) {
+        ripPacket_o.entries[i] = toRipEntry(routers.at(i), 1);
+      }
+
+      // assemble
+      setupIPPacket(output);
+
+      // Dest addr
+      output[16] = multicast_addr;
+      output[17] = multicast_addr >> 8;
+      output[18] = multicast_addr >> 16;
+      output[19] = multicast_addr >> 24;
+
+      // send new routing table to all ports
+      for(int i=0; i<N_IFACE_ON_BOARD; i++) {
+        // Src addr
+        output[12] = addrs[i];
+        output[13] = addrs[i] >> 8;
+        output[14] = addrs[i] >> 16;
+        output[15] = addrs[i] >> 24;
+
+        uint32_t rip_len = assemble(&ripPacket_o, &output[20 + 8]);
+
+        // Total Length
+        output[2] = (rip_len+20+8) >> 8;
+        output[3] = rip_len+20+8;
+
+        // UDP len
+        output[24] = (rip_len+8) >> 8;
+        output[25] = rip_len+8;
+
+        // ip checksum
+        output[10] = 0x00;
+        output[11] = 0x00;
+        unsigned short answer = getChecksum(output, 0, 20);
+        output[10] = answer >> 8;
+        output[11] = answer;
+
+        // udp checksum
+        answer = getChecksum(output, 8, 8+12+8+rip_len);
+        output[26] = answer >> 8;
+        output[27] = answer;
+        HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+      }
+
       printf("30s Timer\n");
       last_time = time;
     }
@@ -170,9 +220,15 @@ int main(int argc, char *argv[]) {
           // if you don't want to calculate udp checksum, set it to zero
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
-          printf("%ud", src_addr);
+          // printf("%ud", src_addr);
         } else {
-          // response
+          // 3a.2 response, ref. RFC2453 3.9.2
+          // update routing table
+          // new metric = ?
+          // update metric, if_index, nexthop
+          // what is missing from RoutingTableEntry?
+          // TODO: use query and update
+          // triggered updates? ref. RFC2453 3.10.1
           uint32_t nexthop, dest_if;
           std::vector<RoutingTableEntry> routers = getRoutingTable();
           std::vector<RipEntry> ripOfRouter = getRipRoutingTable();
@@ -199,6 +255,7 @@ int main(int argc, char *argv[]) {
           // assembling "to delete" packet
           RipPacket deletedPacket;
           deletedPacket.numEntries = deleted.size();
+          deletedPacket.command = 2;
           for (int i=0; i<deletedPacket.numEntries; i ++) {
             deletedPacket.entries[i] = deleted.at(i);
             deletedPacket.entries[i].metric = __builtin_bswap32 (uint32_t(1));
@@ -208,6 +265,7 @@ int main(int argc, char *argv[]) {
           std::vector<RoutingTableEntry> routers = getRoutingTable();
           RipPacket updatePacket;
           updatePacket.numEntries = routers.size();
+          updatePacket.command = 2;
           for (int i=0; i<updatePacket.numEntries; i++) {
             updatePacket.entries[i] = toRipEntry(routers.at(i), 1);
           }
@@ -215,22 +273,22 @@ int main(int argc, char *argv[]) {
           // assemble
           setupIPPacket(output);
 
-          // Source
-          output[12] = dst_addr;
-          output[13] = dst_addr >> 8;
-          output[14] = dst_addr >> 16;
-          output[15] = dst_addr >> 24;
+          // Dest addr
+          output[16] = multicast_addr;
+          output[17] = multicast_addr >> 8;
+          output[18] = multicast_addr >> 16;
+          output[19] = multicast_addr >> 24;
 
           // if there are deleted rips
           if (!deleted.empty()) {
             for(int i=0; i<N_IFACE_ON_BOARD; i++) {
               if(i!=if_index) {
                 
-                // dst addr
-                output[16] = addrs[i];
-                output[17] = addrs[i] >> 8;
-                output[18] = addrs[i] >> 16;
-                output[19] = addrs[i] >> 24;
+                // Src addr
+                output[12] = addrs[i];
+                output[13] = addrs[i] >> 8;
+                output[14] = addrs[i] >> 16;
+                output[15] = addrs[i] >> 24;
 
                 uint32_t rip_len = assemble(&deletedPacket, &output[20 + 8]);
 
@@ -253,18 +311,18 @@ int main(int argc, char *argv[]) {
                 answer = getChecksum(output, 8, 8+12+8+rip_len);
                 output[26] = answer >> 8;
                 output[27] = answer;
-                HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_addr);
+                HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
               }
             }
           }
 
           // send new routing table to all ports
           for(int i=0; i<N_IFACE_ON_BOARD; i++) {
-            // dst addr
-            output[16] = addrs[i];
-            output[17] = addrs[i] >> 8;
-            output[18] = addrs[i] >> 16;
-            output[19] = addrs[i] >> 24;
+            // Src addr
+            output[12] = addrs[i];
+            output[13] = addrs[i] >> 8;
+            output[14] = addrs[i] >> 16;
+            output[15] = addrs[i] >> 24;
 
             uint32_t rip_len = assemble(&updatePacket, &output[20 + 8]);
 
@@ -287,10 +345,12 @@ int main(int argc, char *argv[]) {
             answer = getChecksum(output, 8, 8+12+8+rip_len);
             output[26] = answer >> 8;
             output[27] = answer;
-            HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_addr);
+            HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
           }
         }
-      } else {
+      }
+    } else {
+        // 3b.1 dst is not me
         // forward
         // beware of endianness
         uint32_t nexthop, dest_if, metric;
@@ -327,6 +387,8 @@ int main(int argc, char *argv[]) {
           } else {
             // not found
             // 如果没查到下一跳的 MAC 地址，HAL 会自动发出 ARP 请求，在对方回复后，下次转发时就知道了
+            // you can drop it
+            printf("ARP not found for %x\n", nexthop);
           }
         } else {
           // not found
@@ -343,13 +405,9 @@ int main(int argc, char *argv[]) {
           output[2] = answer >> 8;
           output[3] = answer;
           HAL_SendIPPacket(if_index, output, 36, src_mac); // 36 is the length of a ICMP packet: 8(head of icmp) + 28(ip head + first 8 bytes of ip data)
+          printf("IP not found for %x\n", src_addr);
         }
-      } else {
-        // not found
-        // optionally you can send ICMP Host Unreachable
-        printf("IP not found for %x\n", src_addr);
       }
-    }
   }
   return 0;
 }
