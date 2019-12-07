@@ -1,4 +1,6 @@
 #include <stdint.h>
+
+// 路由表的一项
 typedef struct {
     uint32_t addr;
     uint32_t len;

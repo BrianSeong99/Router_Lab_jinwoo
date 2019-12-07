@@ -1,6 +1,6 @@
 # Router-Lab
 
-最后更新：2019/12/04 10:40 a.m.
+最后更新：2019/12/07 10:20 a.m.
 
 * [如何使用框架](#如何使用框架)
     * [如何使用 HAL](#如何使用-hal)
@@ -317,7 +317,8 @@ int main() {
         uint64_t time = HAL_GetTicks();
         if (time > last_time + 30 * 1000) {
             // 每 30s 做什么
-            // 例如：超时？发 RIP Request？
+            // 例如：超时？发 RIP Request/Response？
+            last_time = time;
         }
 
         // 轮询
@@ -406,7 +407,7 @@ protocol rip {
 
 启动服务（如 `systemctl start bird`）后，你就可以开始抓包，同时查看 bird 打出的信息（`journalctl -f -u bird`），这对调试你的路由器实现很有帮助。
 
-你也可以直接运行 BIRD（`bird -c /etc/bird.conf`），可在命令选项中加上 `-d` 方便直接退出进程。若想同时开多个 BIRD，则需要给每个进程指定单独的 socket。
+你也可以直接运行 BIRD（`bird -c /etc/bird.conf`），可在命令选项中加上 `-d` 把程序放到前台，方便直接退出进程。若想同时开多个 BIRD，则需要给每个进程指定单独的 PID 文件和 socket，如 `bird -d -c bird1.conf -P bird1.pid -s bird1.socket` 。
 
 ### 如何在一台计算机上进行真实测试
 
@@ -487,6 +488,14 @@ A: 树莓派就是一个小型的计算机，只不过指令集是 ARM ，其余
 Q: 我在树莓派写的可以工作的代码，放到我的 x86 电脑上跑怎么就不工作了呢？或者反过来，我在 x86 电脑上写的可以工作的代码，放到树莓派上怎么就不工作了呢？
 
 A: 一个可能的原因是代码出现了 Undefined Behavior ，编译器在不同架构下编译出不同的代码，导致行为不一致。可以用 UBSan 来发现这种问题。
+
+Q: 我用 ssh 连不上树莓派，有什么办法可以进行诊断吗？
+
+A: 可以拿 HDMI 线把树莓派接到显示器上，然后插上 USB 的键盘和鼠标，登录进去用 `ip` 命令看它的网络情况。网络连接方面，可以用网线连到自己的电脑或者宿舍路由器上，也可以连接到 Wi-Fi 。如果没有显示器，也可以用 USB 转串口，把串口接到树莓派对应的引脚上。
+
+Q: 我在 macOS 上安装了 Wireshark，但是报错找不到 tshark ？
+
+A: tshark 可能被安装到了 /Applications/Wireshark.app/Contents/MacOS/tshark 路径下，如果存在这个文件，把目录放到 PATH 环境变量里就可以了。
 
 ## 附录：`ip` 命令的使用 
 
@@ -800,4 +809,4 @@ Make 通过 `%.o` 的格式来支持 wildcard，如 `%.o: %.cpp` 就可以针对
 
 后续维护： @Harry-Chen @jiegec
 
-提交贡献： @Konaoo @nzh63
+提交贡献： @Konaoo @nzh63 @linusboyle

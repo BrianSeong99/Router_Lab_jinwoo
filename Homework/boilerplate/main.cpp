@@ -1,9 +1,9 @@
-#include "router_hal.h"
 #include "rip.h"
 #include "router.h"
+#include "router_hal.h"
 #include <stdint.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vector>
 
@@ -31,7 +31,8 @@ uint8_t output[2048];
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a, 0x0103000a};
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a,
+                                     0x0103000a};
 
 int main(int argc, char *argv[]) {
   // <1>. 获取本机网卡信息
@@ -39,14 +40,14 @@ int main(int argc, char *argv[]) {
   if (res < 0) {
     return res;
   }
-  
-  // Add direct routes
+
+  // 0b. Add direct routes
   // For example:
   // 10.0.0.0/24 if 0
   // 10.0.1.0/24 if 1
   // 10.0.2.0/24 if 2
   // 10.0.3.0/24 if 3
-  for (uint32_t i = 0; i < N_IFACE_ON_BOARD;i++) {
+  for (uint32_t i = 0; i < N_IFACE_ON_BOARD; i++) {
     RoutingTableEntry entry = {
       .addr = addrs[i], // big endian
       .len = 24, // small endian
@@ -63,15 +64,19 @@ int main(int argc, char *argv[]) {
     uint64_t time = HAL_GetTicks();
     if (time > last_time + 30 * 1000) {
       // What to do?
-      printf("Timer\n");
+      // send complete routing table to every interface
+      // ref. RFC2453 3.8
+      // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
+      printf("30s Timer\n");
+      last_time = time;
     }
 
     int mask = (1 << N_IFACE_ON_BOARD) - 1;
     macaddr_t src_mac;
     macaddr_t dst_mac;
     int if_index;
-    res = HAL_ReceiveIPPacket(mask, packet, sizeof(packet), src_mac,
-                                  dst_mac, 1000, &if_index);
+    res = HAL_ReceiveIPPacket(mask, packet, sizeof(packet), src_mac, dst_mac,
+                              1000, &if_index);
     if (res == HAL_ERR_EOF) {
       break;
     } else if (res < 0) {
@@ -97,21 +102,24 @@ int main(int argc, char *argv[]) {
     src_addr = __builtin_bswap32(src_addr);
     dst_addr = __builtin_bswap32(dst_addr);
 
+    // 2. check whether dst is me
     bool dst_is_me = false;
-    for (int i = 0; i < N_IFACE_ON_BOARD;i++) {
+    for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
       if (memcmp(&dst_addr, &addrs[i], sizeof(in_addr_t)) == 0) {
         dst_is_me = true;
         break;
       }
     }
-    // TODO: Handle rip multicast address?
+    // TODO: Handle rip multicast address(224.0.0.9)?
 
     if (dst_is_me) {
-      // TODO: RIP?
+      // 3a.1
       RipPacket rip;
+      // check and validate
       if (disassemble(packet, res, &rip)) {
         if (rip.command == 1) {
-          // request
+          // 3a.3 request, ref. RFC2453 3.9.1
+          // only need to respond to whole table requests in the lab
           RipPacket resp;
           // TODO: fill resp
           resp.command = 2;
@@ -336,6 +344,10 @@ int main(int argc, char *argv[]) {
           output[3] = answer;
           HAL_SendIPPacket(if_index, output, 36, src_mac); // 36 is the length of a ICMP packet: 8(head of icmp) + 28(ip head + first 8 bytes of ip data)
         }
+      } else {
+        // not found
+        // optionally you can send ICMP Host Unreachable
+        printf("IP not found for %x\n", src_addr);
       }
     }
   }
