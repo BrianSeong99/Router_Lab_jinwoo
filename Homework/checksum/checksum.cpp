@@ -39,4 +39,5 @@ unsigned short getChecksum(uint8_t *packet, int start, int end) {
   sum = (sum & 0xffff) + (sum >> 16);
   sum += (sum >> 16);
   unsigned short answer = ~sum;
+  return answer;
 }

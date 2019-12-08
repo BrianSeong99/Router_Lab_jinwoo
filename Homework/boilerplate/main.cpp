@@ -27,12 +27,12 @@ in_addr_t multicast_addr = 0x090000e0; // 224.0.0.9
 
 uint8_t packet[2048];
 uint8_t output[2048];
-// 0: 10.0.0.1
-// 1: 10.0.1.1
+// 0: 10.0.0.1 (169.254.172.31) (192.168.3.2) (10.1.1.1)
+// 1: 10.0.1.1 (10.1.1.2)
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a,
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0101010a, 0x0201010a, 0x0102000a,
                                      0x0103000a};
 
 int main(int argc, char *argv[]) {
@@ -230,7 +230,6 @@ int main(int argc, char *argv[]) {
           // TODO: use query and update
           // triggered updates? ref. RFC2453 3.10.1
           uint32_t nexthop, dest_if;
-          std::vector<RoutingTableEntry> routers = getRoutingTable();
           std::vector<RipEntry> ripOfRouter = getRipRoutingTable();
           std::vector<RipEntry> deleted;
           for (int i=0; i<rip.numEntries; i++) {

@@ -85,16 +85,6 @@ std::vector<RoutingTableEntry> getRoutingTable() {
   return routers;
 }
 
-std::vector<RipEntry> getRipRoutingTable() {
-  std::vector<RipEntry> rips;
-  for (int i=0; i < routers.size(); i++) {
-    rips.at(i).addr = routers.at(i).addr;
-    rips.at(i).mask = __builtin_bswap32 (toEndian(routers.at(i).len));
-    rips.at(i).metric = __builtin_bswap32 (routers.at(i).metric);
-    rips.at(i).nexthop = routers.at(i).nexthop;
-  }
-}
-
 uint32_t toEndian(uint32_t num) {
   uint32_t tmp = 0;
   for (uint32_t i=0; i<num; i++) {
@@ -125,6 +115,7 @@ RoutingTableEntry toRoutingTableEntry(RipEntry rip, uint32_t if_index, uint32_t 
   entry.len = toDigit(rip.mask);
   entry.nexthop = rip.nexthop;
   entry.timestamp = timestamp;
+  return entry;
 }
 
 RipEntry toRipEntry(RoutingTableEntry entry, uint32_t metric) {
@@ -133,4 +124,16 @@ RipEntry toRipEntry(RoutingTableEntry entry, uint32_t metric) {
   rip.mask = __builtin_bswap32 (toEndian(entry.len));
   rip.metric = __builtin_bswap32 (uint32_t(metric));
   rip.nexthop = entry.nexthop;
+  return rip;
+}
+
+std::vector<RipEntry> getRipRoutingTable() {
+  std::vector<RipEntry> rips;
+  for (int i=0; i < routers.size(); i++) {
+    rips.at(i).addr = routers.at(i).addr;
+    rips.at(i).mask = __builtin_bswap32 (toEndian(routers.at(i).len));
+    rips.at(i).metric = __builtin_bswap32 (routers.at(i).metric);
+    rips.at(i).nexthop = routers.at(i).nexthop;
+  }
+  return rips;
 }

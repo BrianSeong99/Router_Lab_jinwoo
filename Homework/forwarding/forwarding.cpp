@@ -40,7 +40,7 @@ bool forward(uint8_t *packet, size_t len) {
 
   sum = (sum & 0xffff) + (sum >> 16);
   sum += (sum >> 16);
-  unsigned short answer = ~sum;
+  answer = ~sum;
   if (answer == 0x0000) {
     packet[10] = sum >> 8;
     packet[11] = sum;
@@ -53,7 +53,7 @@ bool forward(uint8_t *packet, size_t len) {
 }
 
 
-void setupIPPacket(uint8_t *packet) {
+void setupIPPacket(uint8_t *output) {
   // assemble
   // IP
   output[0] = 0x45;
