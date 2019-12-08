@@ -111,13 +111,15 @@ int main(int argc, char *argv[]) {
         output[11] = answer;
 
         // udp checksum
+        output[26] = 0x00;
+        output[27] = 0x00;
         answer = getChecksum(output, 8, 8+12+8+rip_len);
         output[26] = answer >> 8;
         output[27] = answer;
-        HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+        // HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
       }
 
-      printf("30s Timer\n");
+      // printf("30s Timer\n");
       last_time = time;
     }
 
@@ -140,6 +142,19 @@ int main(int argc, char *argv[]) {
     }
 
     // 1. 检查是否是合法的 IP 包，可以用你编写的 validateIPChecksum 函数，还需要一些额外的检查
+    
+    uint8_t version = packet[0] >> 4;
+    if(version != 4 && version != 6) {
+      printf("Invalid version\n");
+      continue;
+    }
+
+    uint8_t TTL = packet[8];
+    if(TTL <= 0) {
+      printf("Invalid TTL\n");
+      continue;
+    }
+    
     if (!validateIPChecksum(packet, res)) {
       printf("Invalid IP Checksum\n");
       continue;
@@ -213,6 +228,8 @@ int main(int argc, char *argv[]) {
           output[11] = answer;
 
           // udp checksum
+          output[26] = 0x00;
+          output[27] = 0x00;
           answer = getChecksum(output, 8, 8+12+8+rip_len); // start from 8, add 12(part of IP), add 8(UDP), and data
           output[26] = answer >> 8;
           output[27] = answer;

@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <iostream>
 
 /**
  * @brief 进行 IP 头的校验和的验证
@@ -8,6 +9,7 @@
  * @return 校验和无误则返回 true ，有误则返回 false
  */
 bool validateIPChecksum(uint8_t *packet, size_t len) {
+  std::cout << "packet[0]: " << packet[0] << " " << len << std::endl;
   int hLength = (int)(packet[0]&0xf) * 4;
   int sum = 0;
   for (int i = 0; i < hLength; i++) {
