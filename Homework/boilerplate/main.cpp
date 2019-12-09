@@ -169,10 +169,14 @@ int main(int argc, char *argv[]) {
 
     // 2. check whether dst is me
     bool dst_is_me = false;
-    for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
-      if (memcmp(&dst_addr, &addrs[i], sizeof(in_addr_t)) == 0) {
-        dst_is_me = true;
-        break;
+    if (memcmp(&dst_addr, &multicast_addr, sizeof(in_addr_t)) == 0) {
+      dst_is_me = true;
+    } else {
+      for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
+        if (memcmp(&dst_addr, &addrs[i], sizeof(in_addr_t)) == 0) {
+          dst_is_me = true;
+          break;
+        }
       }
     }
     // TODO: Handle rip multicast address(224.0.0.9)?
