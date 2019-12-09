@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
   // 10.0.3.0/24 if 3
   for (uint32_t i = 0; i < N_IFACE_ON_BOARD; i++) {
     RoutingTableEntry entry = {
-      .addr = addrs[i], // big endian
+      .addr = addrs[i] & 0xffffff, // big endian
       .len = 24, // small endian
       .if_index = i, // small endian
       .nexthop = 0, // big endian, means direct
