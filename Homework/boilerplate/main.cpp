@@ -244,7 +244,7 @@ int main(int argc, char *argv[]) {
           // if you don't want to calculate udp checksum, set it to zero
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
-          // printf("%ud", src_addr);
+	  std::cout << "request send back to: " << src_addr << std::endl;
         } else {
           // 3a.2 response, ref. RFC2453 3.9.2
           // update routing table
@@ -335,6 +335,8 @@ int main(int argc, char *argv[]) {
                 output[26] = answer >> 8;
                 output[27] = answer;
                 HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+
+		std::cout << "response DELETE packet sent from " << i << " to " << multicast_mac << std::endl;
               }
             }
           }
@@ -369,6 +371,8 @@ int main(int argc, char *argv[]) {
             output[26] = answer >> 8;
             output[27] = answer;
             HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+
+	    std::cout << "response UPDATE packet sent from " << i << " to " << multicast_mac << std::endl;
           }
         }
       }
@@ -404,8 +408,12 @@ int main(int argc, char *argv[]) {
               output[2] = answer >> 8;
               output[3] = answer;
               HAL_SendIPPacket(if_index, output, 36, src_mac); // 36 is the length of a ICMP packet: 8(head of icmp) + 28(ip head + first 8 bytes of ip data)
-            } else {
+		
+	      printf("IP TTL timeout for %x\n", src_addr);
+	    } else {
               HAL_SendIPPacket(dest_if, output, res, dest_mac);
+
+	      std::cout << "forware IP packet sent from " << dest_if << " to " << dst_addr << " " << dest_mac << std::endl;
             }
           } else {
             // not found
