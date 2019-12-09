@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vector>
+#include <iostream>
 
 extern bool validateIPChecksum(uint8_t *packet, size_t len);
 extern void update(bool insert, RoutingTableEntry entry);
@@ -27,12 +28,12 @@ in_addr_t multicast_addr = 0x090000e0; // 224.0.0.9
 
 uint8_t packet[2048];
 uint8_t output[2048];
-// 0: 10.0.0.1 (169.254.172.31) (192.168.3.2) (10.1.1.1)
-// 1: 10.0.1.1 (10.1.1.2)
+// 0: 10.0.0.1 (192.168.3.2)
+// 1: 10.0.1.1 (192.168.4.1)
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0101010a, 0x0201010a, 0x0102000a,
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0203a8c0, 0x0104a8c0, 0x0102000a,
                                      0x0103000a};
 
 int main(int argc, char *argv[]) {
@@ -116,10 +117,10 @@ int main(int argc, char *argv[]) {
         answer = getChecksum(output, 8, 8+12+8+rip_len);
         output[26] = answer >> 8;
         output[27] = answer;
-        // HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+        HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
       }
 
-      // printf("30s Timer\n");
+      printf("30s Timer\n");
       last_time = time;
     }
 
@@ -169,7 +170,9 @@ int main(int argc, char *argv[]) {
 
     // 2. check whether dst is me
     bool dst_is_me = false;
+    std::cout << dst_addr << " " << multicast_addr << std::endl;
     if (memcmp(&dst_addr, &multicast_addr, sizeof(in_addr_t)) == 0) {
+      std::cout << dst_addr << " " << multicast_addr << " " << true << std::endl;
       dst_is_me = true;
     } else {
       for (int i = 0; i < N_IFACE_ON_BOARD; i++) {

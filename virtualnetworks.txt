@@ -14,6 +14,10 @@ sudo ip netns exec net0 ping 10.1.1.2
 bash:
 sudo ip netns exec net0 bash
 
+bird:
+bird -d -c bird_conf_R1.conf -P bird_R1.pid -s bird_R1.socket
+bird -d -c bird_conf_R3.conf -P bird_R3.pid -s bird_R3.socket
+
 mkdir build
 cd build
 cmake .. -DBACKEND=Linux  # cmake .. -DHAL_PLATFORM_TESTING=Linux
