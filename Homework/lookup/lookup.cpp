@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <sstream>
+#include <iostream>
 
 /*
   RoutingTable Entry 的定义如下：
@@ -88,9 +89,8 @@ std::vector<RoutingTableEntry> getRoutingTable() {
 uint32_t toEndian(uint32_t num) {
   uint32_t tmp = 0;
   for (uint32_t i=0; i<num; i++) {
-    tmp = tmp<<1 + 1;
+    tmp = (tmp>>1) + 0x80000000;
   }
-  tmp = tmp << (32-num);
   return tmp;
 }
 
