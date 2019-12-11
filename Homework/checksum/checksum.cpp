@@ -9,7 +9,7 @@
  * @return 校验和无误则返回 true ，有误则返回 false
  */
 bool validateIPChecksum(uint8_t *packet, size_t len) {
-  std::cout << "packet[0]: " << packet[0] << " " << len << std::endl;
+  // std::cout << "packet[0]: " << packet[0] << " " << len << std::endl;
   int hLength = (int)(packet[0]&0xf) * 4;
   int sum = 0;
   for (int i = 0; i < hLength; i++) {
@@ -42,4 +42,30 @@ unsigned short getChecksum(uint8_t *packet, int start, int end) {
   sum += (sum >> 16);
   unsigned short answer = ~sum;
   return answer;
+}
+
+int getUDPChecksum(uint8_t* pac) {
+  int UDPchecksum = 0;
+  uint16_t UDPLength = (((int)pac[24]) << 8) + pac[25];
+  for(int i = 12;i < 20;i++) {
+    if(i % 2 == 0) {
+      UDPchecksum += ((int)pac[i]) << 8;
+    } else {
+      UDPchecksum += (int)pac[i];
+    }
+  }
+  UDPchecksum += 0x11;
+  UDPchecksum += UDPLength;
+  //UDP header
+  for(int i = 20;i < 26;i++) {
+    if(i % 2 == 0) {
+      UDPchecksum += ((int)pac[i]) << 8;
+    } else {
+      UDPchecksum += (int)pac[i];
+    }
+  }
+  UDPchecksum = (UDPchecksum >> 16) + (UDPchecksum & 0xffff);
+  UDPchecksum += (UDPchecksum >> 16);
+  UDPchecksum = ~UDPchecksum;
+  return UDPchecksum;
 }

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <iostream>
 
 /*
   在头文件 rip.h 中定义了如下的结构体：

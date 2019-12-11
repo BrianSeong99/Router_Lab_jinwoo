@@ -22,8 +22,9 @@ extern RipEntry toRipEntry(RoutingTableEntry entry, uint32_t metric);
 extern unsigned short getChecksum(uint8_t *packet, int start, int end);
 extern void setupIPPacket(uint8_t *packet);
 extern void setupICMPPacket(uint8_t *output, uint8_t *packet);
+extern int getUDPChecksum(uint8_t* pac);
 
-macaddr_t multicast_mac = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x16}; // 01:00:5e:00:00:09
+macaddr_t multicast_mac = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x09}; // 01:00:5e:00:00:09
 in_addr_t multicast_addr = 0x090000e0; // 224.0.0.9
 
 uint8_t packet[2048];
@@ -64,7 +65,7 @@ int main(int argc, char *argv[]) {
   uint64_t last_time = 0;
   while (1) {
     uint64_t time = HAL_GetTicks();
-    if (time > last_time + 30 * 1000) {
+    if (time > last_time + 5 * 1000) {
       // What to do?
       // send complete routing table to every interface
       // ref. RFC2453 3.8
@@ -75,6 +76,8 @@ int main(int argc, char *argv[]) {
       ripPacket_o.command = 2;
       for (int i=0; i<ripPacket_o.numEntries; i++) {
         ripPacket_o.entries[i] = toRipEntry(routers.at(i), 1);
+        // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
+        // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
       }
 
       // assemble
@@ -114,11 +117,20 @@ int main(int argc, char *argv[]) {
         // udp checksum
         output[26] = 0x00;
         output[27] = 0x00;
-        answer = getChecksum(output, 8, 8+12+8+rip_len);
-        output[26] = answer >> 8;
-        output[27] = answer;
+        // answer = getUDPChecksum(output);
+        // output[26] = answer >> 8;
+        // output[27] = answer;
         HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
       }
+
+      std::cout << "\n" << "addr\tif\tlen\tmetric\tnexthop\n";
+      for (int i=0; i<routers.size(); i++) {
+        std::cout  << std::hex << routers.at(i).addr << "\t";
+        std::cout << std::dec << routers.at(i).if_index << "\t"
+        << routers.at(i).len << "\t"
+        << routers.at(i).metric << "\t"
+        << std::hex << routers.at(i).nexthop << std::endl;
+      } 
 
       printf("30s Timer\n");
       last_time = time;
@@ -141,6 +153,8 @@ int main(int argc, char *argv[]) {
       // packet is truncated, ignore it
       continue;
     }
+
+    // std::cout << "after time 30, before receive analysis: " << std::hex << packet << " res: " << res << std::endl;
 
     // 1. 检查是否是合法的 IP 包，可以用你编写的 validateIPChecksum 函数，还需要一些额外的检查
     
@@ -165,14 +179,14 @@ int main(int argc, char *argv[]) {
     // big endian 
     memcpy(&src_addr, &packet[12], sizeof(in_addr_t));
     memcpy(&dst_addr, &packet[16], sizeof(in_addr_t));
-    src_addr = __builtin_bswap32(src_addr);
-    dst_addr = __builtin_bswap32(dst_addr);
+    // src_addr = __builtin_bswap32(src_addr);
+    // dst_addr = __builtin_bswap32(dst_addr);
 
     // 2. check whether dst is me
     bool dst_is_me = false;
-    std::cout << dst_addr << " " << multicast_addr << std::endl;
+    // std::cout << "dst_addr: " << std::hex << dst_addr << " multicast_addr: " << std::hex << multicast_addr << std::endl;
     if (memcmp(&dst_addr, &multicast_addr, sizeof(in_addr_t)) == 0) {
-      std::cout << dst_addr << " " << multicast_addr << " " << true << std::endl;
+      // std::cout << dst_addr << " " << multicast_addr << " " << true << std::endl;
       dst_is_me = true;
     } else {
       for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
@@ -182,21 +196,31 @@ int main(int argc, char *argv[]) {
         }
       }
     }
-    // TODO: Handle rip multicast address(224.0.0.9)?
 
+    // TODO: Handle rip multicast address(224.0.0.9)?
+    // std::cout << "before dst_is_me if: " << dst_is_me << std::endl;
     if (dst_is_me) {
       // 3a.1
       RipPacket rip;
       // check and validate
       if (disassemble(packet, res, &rip)) {
+        std::cout << "disassemble-";
         if (rip.command == 1) {
+          std::cout << "request: " << std::endl;
           // 3a.3 request, ref. RFC2453 3.9.1
           // only need to respond to whole table requests in the lab
+
+          // std::cout << "probably here then" << std::endl;
           RipPacket resp;
+          // std::cout << "after resp definition" << std::endl;
+
           // TODO: fill resp
           resp.command = 2;
+          // std::cout << "before getRoutingTable" << std::endl;
           std::vector<RoutingTableEntry> routers = getRoutingTable();
+          // std::cout << "before size: " << std::endl;
           resp.numEntries = routers.size();
+          // std::cout << "after size: " << std::endl;
           for (int i=0; i < routers.size(); i++) {
             resp.entries[i] = toRipEntry(routers.at(i), 1);
           }
@@ -237,15 +261,16 @@ int main(int argc, char *argv[]) {
           // udp checksum
           output[26] = 0x00;
           output[27] = 0x00;
-          answer = getChecksum(output, 8, 8+12+8+rip_len); // start from 8, add 12(part of IP), add 8(UDP), and data
-          output[26] = answer >> 8;
-          output[27] = answer;
+          // answer = getUDPChecksum(output); // start from 8, add 12(part of IP), add 8(UDP), and data
+          // output[26] = answer >> 8;
+          // output[27] = answer;
           // checksum calculation for ip and udp
           // if you don't want to calculate udp checksum, set it to zero
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
-	  std::cout << "request send back to: " << src_addr << std::endl;
+	        std::cout << "request send back to: " << src_addr << std::endl;
         } else {
+          std::cout << "response: " << std::endl;
           // 3a.2 response, ref. RFC2453 3.9.2
           // update routing table
           // new metric = ?
@@ -254,19 +279,36 @@ int main(int argc, char *argv[]) {
           // TODO: use query and update
           // triggered updates? ref. RFC2453 3.10.1
           uint32_t nexthop, dest_if;
+          // std::cout << "before define routers" << std::endl;
           std::vector<RipEntry> ripOfRouter = getRipRoutingTable();
+          // std::cout << "before define deleted" << std::endl;
           std::vector<RipEntry> deleted;
+          // std::cout << "after define routers and deleted" << std::endl;
           for (int i=0; i<rip.numEntries; i++) {
-            if(rip.entries[i].metric+1 > 16) {
+            // std::cout << "i" << std::endl;
+            // std::cout << std::hex << "response rip addr: " << rip.entries[i].addr << std::endl;
+            // std::cout << std::hex << "response rip mask: " << rip.entries[i].mask << std::endl;
+            // std::cout << std::hex << "response rip metric: " << rip.entries[i].metric << std::endl;
+            // std::cout << std::hex << "response rip nexthop: " << rip.entries[i].nexthop << std::endl;
+
+            rip.entries[i].metric = __builtin_bswap32(rip.entries[i].metric);
+            uint32_t query_if_index, query_nexthop, query_metric;
+            bool tmp = query(rip.entries[i].addr, &query_nexthop, &query_if_index, &query_metric);
+            if(rip.entries[i].metric+1 > 16 
+            && src_addr != 0x0103a8c0 // reverse poisoning detection
+            && src_addr != 0x0204a8c0
+            && memcmp(&(rip.entries[i].nexthop), &query_nexthop, sizeof(uint32_t))) {
               update(false, toRoutingTableEntry(rip.entries[i], 0, 0)); // delete route entry
               rip.entries[i].metric++;
               deleted.push_back(rip.entries[i]);
             } else {
-              // 
-              uint32_t query_if_index, query_nexthop, query_metric;
-              if(query(rip.entries[i].addr, &query_nexthop, &query_if_index, &query_metric)) {
+              // update
+              rip.entries[i].metric++;
+              if (rip.entries[i].nexthop == (uint32_t)0x00000000) {
+                rip.entries[i].nexthop = src_addr;
+              }
+              if(tmp) {
                 if (rip.entries[i].metric+1 <= query_metric) {
-                  rip.entries[i].metric++;
                   update(true, toRoutingTableEntry(rip.entries[i], if_index, 0));
                 }
               } else {
@@ -281,7 +323,7 @@ int main(int argc, char *argv[]) {
           deletedPacket.command = 2;
           for (int i=0; i<deletedPacket.numEntries; i ++) {
             deletedPacket.entries[i] = deleted.at(i);
-            deletedPacket.entries[i].metric = __builtin_bswap32 (uint32_t(1));
+            deletedPacket.entries[i].metric = __builtin_bswap32((uint32_t)1);
           }
 
           // assembling "to update" packet
@@ -331,12 +373,14 @@ int main(int argc, char *argv[]) {
                 output[11] = answer;
 
                 // udp checksum
-                answer = getChecksum(output, 8, 8+12+8+rip_len);
-                output[26] = answer >> 8;
-                output[27] = answer;
+                output[26] = 0x00;
+                output[27] = 0x00;
+                // answer = getUDPChecksum(output);
+                // output[26] = answer >> 8;
+                // output[27] = answer;
                 HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
 
-		std::cout << "response DELETE packet sent from " << i << " to " << multicast_mac << std::endl;
+		// std::cout << "response DELETE packet sent from " << i << " to " << multicast_mac << std::endl;
               }
             }
           }
@@ -367,12 +411,14 @@ int main(int argc, char *argv[]) {
             output[11] = answer;
 
             // udp checksum
-            answer = getChecksum(output, 8, 8+12+8+rip_len);
-            output[26] = answer >> 8;
-            output[27] = answer;
+            output[26] = 0x00;
+            output[27] = 0x00;
+            // answer = getChecksum(output, 8, 8+12+8+rip_len);
+            // output[26] = answer >> 8;
+            // output[27] = answer;
             HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
 
-	    std::cout << "response UPDATE packet sent from " << i << " to " << multicast_mac << std::endl;
+	    // std::cout << "response UPDATE packet sent from " << i << " to " << multicast_mac << std::endl;
           }
         }
       }
@@ -381,7 +427,7 @@ int main(int argc, char *argv[]) {
         // forward
         // beware of endianness
         uint32_t nexthop, dest_if, metric;
-        if (query(src_addr, &nexthop, &dest_if, &metric)) {
+        if (query(dst_addr, &nexthop, &dest_if, &metric)) {
           // found
           macaddr_t dest_mac;
           // direct routing
@@ -389,10 +435,12 @@ int main(int argc, char *argv[]) {
             nexthop = dst_addr;
           }
           if (HAL_ArpGetMacAddress(dest_if, nexthop, dest_mac) == 0) {
+            std::cout << "after ARP: " << dest_if << " " << std::hex << nexthop << std::endl;
             // found
             memcpy(output, packet, res);
             // update ttl and checksum
-            forward(output, res);
+            std::cout << "forward status: " <<
+            forward(output, res) << std::endl;
             // TODO: you might want to check ttl=0 case
             // 当TTL=0， 建议构造一个 ICMP Time Exceeded 返回给发送者
             if (output[8] == 0x00) {
@@ -409,11 +457,18 @@ int main(int argc, char *argv[]) {
               output[3] = answer;
               HAL_SendIPPacket(if_index, output, 36, src_mac); // 36 is the length of a ICMP packet: 8(head of icmp) + 28(ip head + first 8 bytes of ip data)
 		
-	      printf("IP TTL timeout for %x\n", src_addr);
-	    } else {
-              HAL_SendIPPacket(dest_if, output, res, dest_mac);
-
-	      std::cout << "forware IP packet sent from " << dest_if << " to " << dst_addr << " " << dest_mac << std::endl;
+              printf("IP TTL timeout for %x\n", src_addr);
+            } else {
+                HAL_SendIPPacket(dest_if, output, res, dest_mac);
+                std::cout << "forware IP packet sent from " 
+                << std::dec << dest_if << " to addr:" << std::hex << dst_addr 
+                << " mac: " << std::hex 
+                << (int)dest_mac[0] << ":" 
+                << (int)dest_mac[1] << ":"
+                << (int)dest_mac[2] << ":" 
+                << (int)dest_mac[3] << ":" 
+                << (int)dest_mac[4] << ":" 
+                << (int)dest_mac[5] << std::endl;
             }
           } else {
             // not found

@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <iostream>
+using namespace std;
 
 /**
  * @brief 进行转发时所需的 IP 头的更新：
@@ -24,7 +26,11 @@ bool forward(uint8_t *packet, size_t len) {
   sum = (sum & 0xffff) + (sum >> 16);
   sum += (sum >> 16);
   unsigned short answer = ~sum;
+
   if (answer != 0x0000) return false;
+
+  cout << "after first checksum: " << endl;
+
 
   packet[8]--;
   sum = 0;
@@ -41,15 +47,9 @@ bool forward(uint8_t *packet, size_t len) {
   sum = (sum & 0xffff) + (sum >> 16);
   sum += (sum >> 16);
   answer = ~sum;
-  if (answer == 0x0000) {
-    packet[10] = sum >> 8;
-    packet[11] = sum;
-    return true;
-  } else {
-    packet[10] = 0x00;
-    packet[11] = 0x00;
-    return false;
-  }
+  packet[10] = answer >> 8;
+  packet[11] = answer;
+  return true;
 }
 
 

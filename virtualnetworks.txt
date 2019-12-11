@@ -18,9 +18,21 @@ sudo ip netns exec net0 ping 10.1.1.2
 bash:
 sudo ip netns exec net0 bash
 
-bird:
+# bird:
 bird -d -c bird_conf_R1.conf -P bird_R1.pid -s bird_R1.socket
-bird -d -c bird_conf_R3.conf -P bird_R3.pid -s bird_R3.socket
+bird -d -c bird_conf_R3.conf -P bird_R3.pid -s bird_R3.socket 
+
+# bird for linux virtual machine:
+bird -d -c bird_conf_R1.conf -P /home/bird_R1.pid -s /home/bird_R1.socket
+bird -d -c bird_conf_R3.conf -P /home/bird_R3.pid -s /home/bird_R3.socket
+
+# Enable auto forwarding in linux:
+echo 1 > /proc/sys/net/ipv4/conf/all/forwarding
+sudo ip netns exec R1 sysctl -w net.ipv4.ip_forward=1
+
+Delete auto forwarding in R2:
+sudo ip a delete 192.168.3.2/24 dev veth-R2-1
+sudo ip a delete 192.168.4.1/24 dev veth-R2-2
 
 mkdir build
 cd build

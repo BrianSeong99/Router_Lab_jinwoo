@@ -96,6 +96,7 @@ uint32_t toEndian(uint32_t num) {
 
 // big endian to digit
 uint32_t toDigit(uint32_t endian) {
+  // std::cout << "endian: " << endian << std::endl;
   uint32_t counter = 0;
   for (int i = 0; i < 32; i++) {
     if (endian & 0x1 == 1) {
@@ -105,16 +106,19 @@ uint32_t toDigit(uint32_t endian) {
       break;
     }
   }
+  // std::cout << "endian & couter: " << std::hex << endian;
+  // std::cout << " " << std::dec << counter << std::endl; 
   return counter;
 }
 
-RoutingTableEntry toRoutingTableEntry(RipEntry rip, uint32_t if_index, uint32_t timestamp) {
+RoutingTableEntry toRoutingTableEntry(RipEntry rip, uint32_t if_index, uint32_t timestamp) {  
   RoutingTableEntry entry;
   entry.addr = rip.addr;
   entry.if_index = if_index;
   entry.len = toDigit(rip.mask);
   entry.nexthop = rip.nexthop;
   entry.timestamp = timestamp;
+  entry.metric = rip.metric;
   return entry;
 }
 
@@ -122,18 +126,26 @@ RipEntry toRipEntry(RoutingTableEntry entry, uint32_t metric) {
   RipEntry rip;
   rip.addr = entry.addr;
   rip.mask = __builtin_bswap32 (toEndian(entry.len));
-  rip.metric = __builtin_bswap32 (uint32_t(metric));
+  rip.metric = __builtin_bswap32(metric);
   rip.nexthop = entry.nexthop;
   return rip;
 }
 
 std::vector<RipEntry> getRipRoutingTable() {
   std::vector<RipEntry> rips;
-  for (int i=0; i < routers.size(); i++) {
+  // std::cout << "inside getRipRoutingTable" << std::endl;
+  // std::cout << "routers.size(): " << routers.size() << std::endl;
+  for (int i = 0; i < routers.size(); i++) {
+    RipEntry tmpRip;
+    rips.push_back(tmpRip);
     rips.at(i).addr = routers.at(i).addr;
+    // std::cout << i << " after addr" << std::endl;
     rips.at(i).mask = __builtin_bswap32 (toEndian(routers.at(i).len));
-    rips.at(i).metric = __builtin_bswap32 (routers.at(i).metric);
+    // std::cout << i << " after mask" << std::endl;
+    rips.at(i).metric = routers.at(i).metric;
+    // std::cout << i << " after metric " << rips.at(i).metric << std::endl;
     rips.at(i).nexthop = routers.at(i).nexthop;
+    // std::cout << i << " after nexthop" << std::endl;
   }
   return rips;
 }
