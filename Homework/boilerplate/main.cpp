@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
       .len = 24, // small endian
       .if_index = i, // small endian
       .nexthop = 0, // big endian, means direct
-      .metric = 0,
+      .metric = 1,
       .timestamp = 0
     };
     update(true, entry);
@@ -70,27 +70,34 @@ int main(int argc, char *argv[]) {
       // send complete routing table to every interface
       // ref. RFC2453 3.8
       // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
+
       std::vector<RoutingTableEntry> routers = getRoutingTable();
-      RipPacket ripPacket_o;
-      ripPacket_o.numEntries = routers.size();
-      ripPacket_o.command = 2;
-      for (int i=0; i<ripPacket_o.numEntries; i++) {
-        ripPacket_o.entries[i] = toRipEntry(routers.at(i), 1);
-        // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
-        // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
-      }
-
-      // assemble
-      setupIPPacket(output);
-
-      // Dest addr
-      output[16] = multicast_addr;
-      output[17] = multicast_addr >> 8;
-      output[18] = multicast_addr >> 16;
-      output[19] = multicast_addr >> 24;
-
       // send new routing table to all ports
       for(int i=0; i<N_IFACE_ON_BOARD; i++) {
+        RipPacket ripPacket_o;
+        ripPacket_o.numEntries = routers.size();
+        ripPacket_o.command = 2;
+        for (int j=0; j<ripPacket_o.numEntries; j++) {
+          if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
+            ripPacket_o.entries[j] = toRipEntry(routers.at(j), 16);
+          } else if (routers.at(j).nexthop == 0) {
+            ripPacket_o.entries[j] = toRipEntry(routers.at(j), 1);
+          } else {
+            ripPacket_o.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+          }
+          // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
+          // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
+        }
+
+        // assemble
+        setupIPPacket(output);
+
+        // Dest addr
+        output[16] = multicast_addr;
+        output[17] = multicast_addr >> 8;
+        output[18] = multicast_addr >> 16;
+        output[19] = multicast_addr >> 24;
+
         // Src addr
         output[12] = addrs[i];
         output[13] = addrs[i] >> 8;
@@ -130,7 +137,7 @@ int main(int argc, char *argv[]) {
         << routers.at(i).len << "\t"
         << routers.at(i).metric << "\t"
         << std::hex << routers.at(i).nexthop << std::endl;
-      } 
+      }
 
       printf("30s Timer\n");
       last_time = time;
@@ -222,7 +229,11 @@ int main(int argc, char *argv[]) {
           resp.numEntries = routers.size();
           // std::cout << "after size: " << std::endl;
           for (int i=0; i < routers.size(); i++) {
-            resp.entries[i] = toRipEntry(routers.at(i), 1);
+            if (routers.at(i).nexthop != 0 && routers.at(i).if_index == if_index) {
+              resp.entries[i] = toRipEntry(routers.at(i), 16);
+            } else {
+              resp.entries[i] = toRipEntry(routers.at(i), routers.at(i).metric);
+            }
           }
           // assemble
           // IP
@@ -282,7 +293,7 @@ int main(int argc, char *argv[]) {
           // std::cout << "before define routers" << std::endl;
           std::vector<RipEntry> ripOfRouter = getRipRoutingTable();
           // std::cout << "before define deleted" << std::endl;
-          std::vector<RipEntry> deleted;
+          std::vector<RoutingTableEntry> deleted;
           // std::cout << "after define routers and deleted" << std::endl;
           for (int i=0; i<rip.numEntries; i++) {
             // std::cout << "i" << std::endl;
@@ -298,41 +309,25 @@ int main(int argc, char *argv[]) {
             && src_addr != 0x0103a8c0 // reverse poisoning detection
             && src_addr != 0x0204a8c0
             && memcmp(&(rip.entries[i].nexthop), &query_nexthop, sizeof(uint32_t))) {
-              update(false, toRoutingTableEntry(rip.entries[i], 0, 0)); // delete route entry
               rip.entries[i].metric++;
-              deleted.push_back(rip.entries[i]);
+              RoutingTableEntry entry = toRoutingTableEntry(rip.entries[i], query_if_index, 0);
+              update(false, entry); // delete route entry
+              deleted.push_back(entry);
             } else {
               // update
-              rip.entries[i].metric++;
               if (rip.entries[i].nexthop == (uint32_t)0x00000000) {
                 rip.entries[i].nexthop = src_addr;
               }
               if(tmp) {
                 if (rip.entries[i].metric+1 <= query_metric) {
+                  rip.entries[i].metric++;
                   update(true, toRoutingTableEntry(rip.entries[i], if_index, 0));
                 }
               } else {
+                rip.entries[i].metric++;
                 update(true, toRoutingTableEntry(rip.entries[i], if_index, 0)); // insert if rip is not found in routing table
               }
             }
-          }
-
-          // assembling "to delete" packet
-          RipPacket deletedPacket;
-          deletedPacket.numEntries = deleted.size();
-          deletedPacket.command = 2;
-          for (int i=0; i<deletedPacket.numEntries; i ++) {
-            deletedPacket.entries[i] = deleted.at(i);
-            deletedPacket.entries[i].metric = __builtin_bswap32((uint32_t)1);
-          }
-
-          // assembling "to update" packet
-          std::vector<RoutingTableEntry> routers = getRoutingTable();
-          RipPacket updatePacket;
-          updatePacket.numEntries = routers.size();
-          updatePacket.command = 2;
-          for (int i=0; i<updatePacket.numEntries; i++) {
-            updatePacket.entries[i] = toRipEntry(routers.at(i), 1);
           }
 
           // assemble
@@ -348,6 +343,18 @@ int main(int argc, char *argv[]) {
           if (!deleted.empty()) {
             for(int i=0; i<N_IFACE_ON_BOARD; i++) {
               if(i!=if_index) {
+
+                // assembling "to delete" packet
+                RipPacket deletedPacket;
+                deletedPacket.numEntries = deleted.size();
+                deletedPacket.command = 2;
+                for (int j=0; j<deletedPacket.numEntries; j++) {
+                  if (deleted.at(j).nexthop != 0 && deleted.at(j).if_index == i) {
+                    deletedPacket.entries[j] = toRipEntry(deleted.at(j), 16);
+                  } else {
+                    deletedPacket.entries[j] = toRipEntry(deleted.at(j), deleted.at(j).metric);
+                  }
+                }
                 
                 // Src addr
                 output[12] = addrs[i];
@@ -380,13 +387,25 @@ int main(int argc, char *argv[]) {
                 // output[27] = answer;
                 HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
 
-		// std::cout << "response DELETE packet sent from " << i << " to " << multicast_mac << std::endl;
               }
             }
           }
 
           // send new routing table to all ports
           for(int i=0; i<N_IFACE_ON_BOARD; i++) {
+            // assembling "to update" packet
+            std::vector<RoutingTableEntry> routers = getRoutingTable();
+            RipPacket updatePacket;
+            updatePacket.numEntries = routers.size();
+            updatePacket.command = 2;
+            for (int j=0; j<updatePacket.numEntries; j++) {
+              if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
+                updatePacket.entries[j] = toRipEntry(routers.at(j), 16);
+              } else {
+                updatePacket.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+              }
+            }
+
             // Src addr
             output[12] = addrs[i];
             output[13] = addrs[i] >> 8;
@@ -444,10 +463,14 @@ int main(int argc, char *argv[]) {
             // TODO: you might want to check ttl=0 case
             // 当TTL=0， 建议构造一个 ICMP Time Exceeded 返回给发送者
             if (output[8] == 0x00) {
+              setupIPPacket(output);
+
+              output[12] = 
+
               // ICMP type
-              output[0] = 0x0b;
+              output[20] = 0x0b;
               // ICMP code
-              output[1] = 0x00;
+              output[21] = 0x00;
               
               setupICMPPacket(output, packet);
 

@@ -87,17 +87,17 @@ void setupIPPacket(uint8_t *output) {
 
 void setupICMPPacket(uint8_t *output, uint8_t *packet) {
   // ICMP checksum
-  output[2] = 0x00;
-  output[3] = 0x00;
+  output[22] = 0x00;
+  output[23] = 0x00;
 
   // no use
-  output[4] = 0x00;
-  output[5] = 0x00;
-  output[6] = 0x00;
-  output[7] = 0x00;
+  output[24] = 0x00;
+  output[25] = 0x00;
+  output[26] = 0x00;
+  output[27] = 0x00;
 
   // IP head + 64 bits of data
-  for (int i=0; i<28; i++) {
+  for (int i=20; i<48; i++) {
     output[i+8] = packet[i];
   }
 }
