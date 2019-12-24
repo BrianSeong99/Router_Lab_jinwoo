@@ -34,7 +34,7 @@ uint8_t output[2048];
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0203a8c0, 0x0104a8c0, 0x0102000a,
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0103a8c0, 0x0101a8c0, 0x0102000a,
                                      0x0103000a};
 
 int main(int argc, char *argv[]) {
@@ -74,60 +74,65 @@ int main(int argc, char *argv[]) {
       std::vector<RoutingTableEntry> routers = getRoutingTable();
       // send new routing table to all ports
       for(int i=0; i<N_IFACE_ON_BOARD; i++) {
-        RipPacket ripPacket_o;
-        ripPacket_o.numEntries = routers.size();
-        ripPacket_o.command = 2;
-        for (int j=0; j<ripPacket_o.numEntries; j++) {
-          if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
-            ripPacket_o.entries[j] = toRipEntry(routers.at(j), 16);
-          } else if (routers.at(j).nexthop == 0) {
-            ripPacket_o.entries[j] = toRipEntry(routers.at(j), 1);
-          } else {
-            ripPacket_o.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+	for (int routeIndex = 0; routeIndex < routers.size(); routeIndex+=25) { 
+          RipPacket ripPacket_o;
+          //ripPacket_o.numEntries = routers.size();
+          ripPacket_o.command = 2;
+	  int j;
+          for (j=routeIndex; j<(routers.size() < routeIndex+25 ? routers.size() : routeIndex+25); j++) {
+            if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
+              ripPacket_o.entries[j] = toRipEntry(routers.at(j), 16);
+            } else if (routers.at(j).nexthop == 0) {
+              ripPacket_o.entries[j] = toRipEntry(routers.at(j), 1);
+            } else {
+              ripPacket_o.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+            }
+            ripPacket_o.entries[j].nexthop = 0;
+            // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
+            // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
           }
-          // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
-          // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
-        }
+	  ripPacket_o.numEntries = j-routeIndex+1;
 
-        // assemble
-        setupIPPacket(output);
+          // assemble
+          setupIPPacket(output);
 
-        // Dest addr
-        output[16] = multicast_addr;
-        output[17] = multicast_addr >> 8;
-        output[18] = multicast_addr >> 16;
-        output[19] = multicast_addr >> 24;
+          // Dest addr
+          output[16] = multicast_addr;
+          output[17] = multicast_addr >> 8;
+          output[18] = multicast_addr >> 16;
+          output[19] = multicast_addr >> 24;
 
-        // Src addr
-        output[12] = addrs[i];
-        output[13] = addrs[i] >> 8;
-        output[14] = addrs[i] >> 16;
-        output[15] = addrs[i] >> 24;
+          // Src addr
+          output[12] = addrs[i];
+          output[13] = addrs[i] >> 8;
+          output[14] = addrs[i] >> 16;
+          output[15] = addrs[i] >> 24;
 
-        uint32_t rip_len = assemble(&ripPacket_o, &output[20 + 8]);
+          uint32_t rip_len = assemble(&ripPacket_o, &output[20 + 8]);
 
-        // Total Length
-        output[2] = (rip_len+20+8) >> 8;
-        output[3] = rip_len+20+8;
+          // Total Length
+          output[2] = (rip_len+20+8) >> 8;
+          output[3] = rip_len+20+8;
 
-        // UDP len
-        output[24] = (rip_len+8) >> 8;
-        output[25] = rip_len+8;
+          // UDP len
+          output[24] = (rip_len+8) >> 8;
+          output[25] = rip_len+8;
 
-        // ip checksum
-        output[10] = 0x00;
-        output[11] = 0x00;
-        unsigned short answer = getChecksum(output, 0, 20);
-        output[10] = answer >> 8;
-        output[11] = answer;
+          // ip checksum
+          output[10] = 0x00;
+          output[11] = 0x00;
+          unsigned short answer = getChecksum(output, 0, 20);
+          output[10] = answer >> 8;
+          output[11] = answer;
 
-        // udp checksum
-        output[26] = 0x00;
-        output[27] = 0x00;
-        // answer = getUDPChecksum(output);
-        // output[26] = answer >> 8;
-        // output[27] = answer;
-        HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+          // udp checksum
+          output[26] = 0x00;
+          output[27] = 0x00;
+          // answer = getUDPChecksum(output);
+          // output[26] = answer >> 8;
+          // output[27] = answer;
+          HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+      	}
       }
 
       std::cout << "\n" << "addr\tif\tlen\tmetric\tnexthop\n";
@@ -226,6 +231,7 @@ int main(int argc, char *argv[]) {
           // std::cout << "before getRoutingTable" << std::endl;
           std::vector<RoutingTableEntry> routers = getRoutingTable();
           // std::cout << "before size: " << std::endl;
+
           resp.numEntries = routers.size();
           // std::cout << "after size: " << std::endl;
           for (int i=0; i < routers.size(); i++) {
@@ -234,6 +240,7 @@ int main(int argc, char *argv[]) {
             } else {
               resp.entries[i] = toRipEntry(routers.at(i), routers.at(i).metric);
             }
+            resp.entries[i].nexthop = 0;
           }
           // assemble
           // IP
@@ -306,8 +313,7 @@ int main(int argc, char *argv[]) {
             uint32_t query_if_index, query_nexthop, query_metric;
             bool tmp = query(rip.entries[i].addr, &query_nexthop, &query_if_index, &query_metric);
             if(rip.entries[i].metric+1 > 16 
-            && src_addr != 0x0103a8c0 // reverse poisoning detection
-            && src_addr != 0x0204a8c0
+            && src_addr != 0x0203a8c0 // reverse poisoning detection // && src_addr != 0x0204a8c0
             && memcmp(&(rip.entries[i].nexthop), &query_nexthop, sizeof(uint32_t))) {
               rip.entries[i].metric++;
               RoutingTableEntry entry = toRoutingTableEntry(rip.entries[i], query_if_index, 0);
@@ -330,115 +336,117 @@ int main(int argc, char *argv[]) {
             }
           }
 
-          // assemble
-          setupIPPacket(output);
+          //// assemble
+          //setupIPPacket(output);
 
-          // Dest addr
-          output[16] = multicast_addr;
-          output[17] = multicast_addr >> 8;
-          output[18] = multicast_addr >> 16;
-          output[19] = multicast_addr >> 24;
+          //// Dest addr
+          //output[16] = multicast_addr;
+          //output[17] = multicast_addr >> 8;
+          //output[18] = multicast_addr >> 16;
+          //output[19] = multicast_addr >> 24;
 
-          // if there are deleted rips
-          if (!deleted.empty()) {
-            for(int i=0; i<N_IFACE_ON_BOARD; i++) {
-              if(i!=if_index) {
+          //// if there are deleted rips
+          //if (!deleted.empty()) {
+            //for(int i=0; i<N_IFACE_ON_BOARD; i++) {
+             // if(i!=if_index) {
 
-                // assembling "to delete" packet
-                RipPacket deletedPacket;
-                deletedPacket.numEntries = deleted.size();
-                deletedPacket.command = 2;
-                for (int j=0; j<deletedPacket.numEntries; j++) {
-                  if (deleted.at(j).nexthop != 0 && deleted.at(j).if_index == i) {
-                    deletedPacket.entries[j] = toRipEntry(deleted.at(j), 16);
-                  } else {
-                    deletedPacket.entries[j] = toRipEntry(deleted.at(j), deleted.at(j).metric);
-                  }
-                }
+               // // assembling "to delete" packet
+               // RipPacket deletedPacket;
+               // deletedPacket.numEntries = deleted.size();
+               // deletedPacket.command = 2;
+               // for (int j=0; j<deletedPacket.numEntries; j++) {
+               //   if (deleted.at(j).nexthop != 0 && deleted.at(j).if_index == i) {
+                 //   deletedPacket.entries[j] = toRipEntry(deleted.at(j), 16);
+                 // } else {
+                  //  deletedPacket.entries[j] = toRipEntry(deleted.at(j), deleted.at(j).metric);
+                 // }
+                 // deletedPacket.entries[j].nexthop = 0;
+              //  }
                 
                 // Src addr
-                output[12] = addrs[i];
-                output[13] = addrs[i] >> 8;
-                output[14] = addrs[i] >> 16;
-                output[15] = addrs[i] >> 24;
+               // output[12] = addrs[i];
+               // output[13] = addrs[i] >> 8;
+               // output[14] = addrs[i] >> 16;
+               // output[15] = addrs[i] >> 24;
 
-                uint32_t rip_len = assemble(&deletedPacket, &output[20 + 8]);
+               // uint32_t rip_len = assemble(&deletedPacket, &output[20 + 8]);
 
-                // Total Length
-                output[2] = (rip_len+20+8) >> 8;
-                output[3] = rip_len+20+8;
+               // // Total Length
+               // output[2] = (rip_len+20+8) >> 8;
+               // output[3] = rip_len+20+8;
 
-                // UDP len
-                output[24] = (rip_len+8) >> 8;
-                output[25] = rip_len+8;
+               // // UDP len
+               // output[24] = (rip_len+8) >> 8;
+               // output[25] = rip_len+8;
 
-                // ip checksum
-                output[10] = 0x00;
-                output[11] = 0x00;
-                unsigned short answer = getChecksum(output, 0, 20);
-                output[10] = answer >> 8;
-                output[11] = answer;
+               // // ip checksum
+               // output[10] = 0x00;
+               // output[11] = 0x00;
+               // unsigned short answer = getChecksum(output, 0, 20);
+               // output[10] = answer >> 8;
+               // output[11] = answer;
 
-                // udp checksum
-                output[26] = 0x00;
-                output[27] = 0x00;
-                // answer = getUDPChecksum(output);
-                // output[26] = answer >> 8;
-                // output[27] = answer;
-                HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+               // // udp checksum
+               // output[26] = 0x00;
+               // output[27] = 0x00;
+               // // answer = getUDPChecksum(output);
+               // // output[26] = answer >> 8;
+               // // output[27] = answer;
+               // HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
 
-              }
-            }
-          }
+             // }
+            //}
+          //}
 
-          // send new routing table to all ports
-          for(int i=0; i<N_IFACE_ON_BOARD; i++) {
-            // assembling "to update" packet
-            std::vector<RoutingTableEntry> routers = getRoutingTable();
-            RipPacket updatePacket;
-            updatePacket.numEntries = routers.size();
-            updatePacket.command = 2;
-            for (int j=0; j<updatePacket.numEntries; j++) {
-              if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
-                updatePacket.entries[j] = toRipEntry(routers.at(j), 16);
-              } else {
-                updatePacket.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
-              }
-            }
+          //// send new routing table to all ports
+          //for(int i=0; i<N_IFACE_ON_BOARD; i++) {
+           // // assembling "to update" packet
+           // std::vector<RoutingTableEntry> routers = getRoutingTable();
+           // RipPacket updatePacket;
+           // updatePacket.numEntries = routers.size();
+           // updatePacket.command = 2;
+           // for (int j=0; j<updatePacket.numEntries; j++) {
+           //   if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
+           //     updatePacket.entries[j] = toRipEntry(routers.at(j), 16);
+           //   } else {
+           //     updatePacket.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+           //   }
+           //   updatePacket.entries[j].nexthop = 0;
+           // }
 
-            // Src addr
-            output[12] = addrs[i];
-            output[13] = addrs[i] >> 8;
-            output[14] = addrs[i] >> 16;
-            output[15] = addrs[i] >> 24;
+           // // Src addr
+           // output[12] = addrs[i];
+           // output[13] = addrs[i] >> 8;
+           // output[14] = addrs[i] >> 16;
+           // output[15] = addrs[i] >> 24;
 
-            uint32_t rip_len = assemble(&updatePacket, &output[20 + 8]);
+           // uint32_t rip_len = assemble(&updatePacket, &output[20 + 8]);
 
-            // Total Length
-            output[2] = (rip_len+20+8) >> 8;
-            output[3] = rip_len+20+8;
+           // // Total Length
+           // output[2] = (rip_len+20+8) >> 8;
+           // output[3] = rip_len+20+8;
 
-            // UDP len
-            output[24] = (rip_len+8) >> 8;
-            output[25] = rip_len+8;
+           // // UDP len
+           // output[24] = (rip_len+8) >> 8;
+           // output[25] = rip_len+8;
 
-            // ip checksum
-            output[10] = 0x00;
-            output[11] = 0x00;
-            unsigned short answer = getChecksum(output, 0, 20);
-            output[10] = answer >> 8;
-            output[11] = answer;
+           // // ip checksum
+           // output[10] = 0x00;
+           // output[11] = 0x00;
+           // unsigned short answer = getChecksum(output, 0, 20);
+           // output[10] = answer >> 8;
+           // output[11] = answer;
 
-            // udp checksum
-            output[26] = 0x00;
-            output[27] = 0x00;
-            // answer = getChecksum(output, 8, 8+12+8+rip_len);
-            // output[26] = answer >> 8;
-            // output[27] = answer;
-            HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
+           // // udp checksum
+           // output[26] = 0x00;
+           // output[27] = 0x00;
+           // // answer = getChecksum(output, 8, 8+12+8+rip_len);
+           // // output[26] = answer >> 8;
+           // // output[27] = answer;
+           // HAL_SendIPPacket(i, output, rip_len + 20 + 8, multicast_mac);
 
-	    // std::cout << "response UPDATE packet sent from " << i << " to " << multicast_mac << std::endl;
-          }
+	   // // std::cout << "response UPDATE packet sent from " << i << " to " << multicast_mac << std::endl;
+         // }
         }
       }
     } else {
