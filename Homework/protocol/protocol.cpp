@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+using namespace std;
 
 /*
   在头文件 rip.h 中定义了如下的结构体：
@@ -46,7 +47,9 @@
  * Mask 的二进制是不是连续的 1 与连续的 0 组成等等。
  */
 bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
-
+    
+    //cout << "protocol len: " << len << endl;
+    
     uint8_t command = packet[28];
     uint8_t version = packet[29];
     output->numEntries = 0;
@@ -54,12 +57,12 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 
     if(
         (
-            ((int)packet[2] << 8 + packet[3] > len)                     // check total length vs len
+            (((int)packet[2] << 8) + packet[3] > len)                     // check total length vs len
             || (command != 0x01 && command != 0x02)                     // check if command is 1 or 2
             || (version != 0x02)                                        // check if version is 2
             || ((uint16_t)(((int)packet[30]<<8)+packet[31]) != 0x0000)  // check if zero is 0
         )
-    ) return false;
+    ) {return false;}
 
     int packetsNum = ((((int)packet[2])<<8)+packet[3]-(packet[0]&0xf)*4) / 20;
 
@@ -67,6 +70,7 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
         uint16_t family = ((int)packet[32+i*20]<<8) + packet[33+i*20];
         if((command==0x02 && family==0x0002) || (command==0x01 && family==0x0000)) {
             uint32_t metric=((int)packet[48+i*20]<<24)+((int)packet[49+i*20]<<16)+((int)packet[50+i*20]<<8)+packet[51+i*20];
+            //printf("protocol metric: %u\n", metric);
             if(metric >= 1 && metric <= 16) {                           // check metric
                 uint32_t mask=((int)packet[40+i*20]<<24)+((int)packet[41+i*20]<<16)+((int)packet[42+i*20]<<8)+packet[43+i*20];
                 

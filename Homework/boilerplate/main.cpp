@@ -7,10 +7,12 @@
 #include <string.h>
 #include <vector>
 #include <iostream>
+using namespace std;
 
 extern bool validateIPChecksum(uint8_t *packet, size_t len);
 extern void update(bool insert, RoutingTableEntry entry);
 extern bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index, uint32_t *metric);
+extern bool query_exact(uint32_t addr, uint32_t *nexthop, uint32_t *if_index, uint32_t *metric);
 extern bool forward(uint8_t *packet, size_t len);
 extern bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output);
 extern uint32_t assemble(const RipPacket *rip, uint8_t *buffer);
@@ -61,6 +63,46 @@ int main(int argc, char *argv[]) {
     };
     update(true, entry);
   }
+/*
+  RoutingTableEntry entry = {
+    .len = 24,
+    .if_index = 0,
+    .nexthop = 0,
+    .metric = 1,
+    .timestamp = 0
+  };
+  */
+  //in_addr_t testaddrs[25] = {
+  //  0x1010a8c0,
+  //  0x1111a8c0,
+  //  0x1212a8c0,
+  //  0x1313a8c0,
+  //  0x1414a8c0,
+  //  0x1515a8c0,
+  //  0x1616a8c0,
+  //  0x1717a8c0,
+  //  0x1818a8c0,
+  //  0x1919a8c0,
+  //  0x2020a8c0,
+  //  0x2121a8c0,
+  //  0x2222a8c0,
+  //  0x2323a8c0,
+  //  0x2424a8c0,
+  //  0x2525a8c0,
+  //  0x2626a8c0,
+  //  0x2727a8c0,
+  //  0x2828a8c0,
+  //  0x2929a8c0,
+  //  0x3030a8c0,
+  //  0x3131a8c0,
+  //  0x3232a8c0,
+  //  0x3333a8c0,
+  //  0x3434a8c0
+  //};
+  //for (uint32_t i=0; i<25; i++) {
+  //  entry.addr = testaddrs[i];
+  //  update(true, entry);
+  //}
 
   uint64_t last_time = 0;
   while (1) {
@@ -78,20 +120,20 @@ int main(int argc, char *argv[]) {
           RipPacket ripPacket_o;
           //ripPacket_o.numEntries = routers.size();
           ripPacket_o.command = 2;
-	  int j;
-          for (j=routeIndex; j<(routers.size() < routeIndex+25 ? routers.size() : routeIndex+25); j++) {
+	  int j, kk;
+          for (j=routeIndex, kk = 0; j<(routers.size() < routeIndex+25 ? routers.size() : routeIndex+25); j++, kk++) {
             if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
-              ripPacket_o.entries[j] = toRipEntry(routers.at(j), 16);
+              ripPacket_o.entries[kk] = toRipEntry(routers.at(j), 16);
             } else if (routers.at(j).nexthop == 0) {
-              ripPacket_o.entries[j] = toRipEntry(routers.at(j), 1);
+              ripPacket_o.entries[kk] = toRipEntry(routers.at(j), 1);
             } else {
-              ripPacket_o.entries[j] = toRipEntry(routers.at(j), routers.at(j).metric);
+              ripPacket_o.entries[kk] = toRipEntry(routers.at(j), routers.at(j).metric);
             }
-            ripPacket_o.entries[j].nexthop = 0;
+            ripPacket_o.entries[kk].nexthop = 0;
             // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
             // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
           }
-	  ripPacket_o.numEntries = j-routeIndex+1;
+	  ripPacket_o.numEntries = kk;
 
           // assemble
           setupIPPacket(output);
@@ -135,13 +177,14 @@ int main(int argc, char *argv[]) {
       	}
       }
 
-      std::cout << "\n" << "addr\tif\tlen\tmetric\tnexthop\n";
+      printf("\naddr\tif\tlen\tmetric\tnexthop\n");
       for (int i=0; i<routers.size(); i++) {
-        std::cout  << std::hex << routers.at(i).addr << "\t";
-        std::cout << std::dec << routers.at(i).if_index << "\t"
-        << routers.at(i).len << "\t"
-        << routers.at(i).metric << "\t"
-        << std::hex << routers.at(i).nexthop << std::endl;
+        printf("%x\t%d\t%d\t%d\t%x\n", 
+        routers.at(i).addr, 
+        routers.at(i).if_index, 
+        routers.at(i).len,
+        routers.at(i).metric,
+        routers.at(i).nexthop);
       }
 
       printf("30s Timer\n");
@@ -208,6 +251,7 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    //cout << "dst_is_me: " << dst_is_me << " before dst_is_me res:" << res << endl;
 
     // TODO: Handle rip multicast address(224.0.0.9)?
     // std::cout << "before dst_is_me if: " << dst_is_me << std::endl;
@@ -215,80 +259,87 @@ int main(int argc, char *argv[]) {
       // 3a.1
       RipPacket rip;
       // check and validate
+      bool disassemble_result = disassemble(packet, res, &rip);
+      //cout << "disassemble result: " << disassemble_result << endl;
       if (disassemble(packet, res, &rip)) {
-        std::cout << "disassemble-";
+        //std::cout << "disassemble-";
         if (rip.command == 1) {
-          std::cout << "request: " << std::endl;
+          //std::cout << "request: " << std::endl;
           // 3a.3 request, ref. RFC2453 3.9.1
           // only need to respond to whole table requests in the lab
 
           // std::cout << "probably here then" << std::endl;
-          RipPacket resp;
           // std::cout << "after resp definition" << std::endl;
 
           // TODO: fill resp
-          resp.command = 2;
           // std::cout << "before getRoutingTable" << std::endl;
           std::vector<RoutingTableEntry> routers = getRoutingTable();
-          // std::cout << "before size: " << std::endl;
-
-          resp.numEntries = routers.size();
-          // std::cout << "after size: " << std::endl;
-          for (int i=0; i < routers.size(); i++) {
-            if (routers.at(i).nexthop != 0 && routers.at(i).if_index == if_index) {
-              resp.entries[i] = toRipEntry(routers.at(i), 16);
-            } else {
-              resp.entries[i] = toRipEntry(routers.at(i), routers.at(i).metric);
+	  for (int routeIndex = 0; routeIndex < routers.size(); routeIndex+=25) {
+            // std::cout << "before size: " << std::endl;
+	    RipPacket resp;
+	    resp.command = 2;
+            int i, kk = 0;
+            // std::cout << "after size: " << std::endl;
+            for (i=routeIndex; i < (routers.size() < routeIndex+25 ? routers.size() : routeIndex+25 ); i++, kk++) {
+              if (routers.at(i).nexthop != 0 && routers.at(i).if_index == if_index) {
+                resp.entries[kk] = toRipEntry(routers.at(i), 16);
+              } else {
+                resp.entries[kk] = toRipEntry(routers.at(i), routers.at(i).metric);
+              }
+              resp.entries[kk].nexthop = 0;
             }
-            resp.entries[i].nexthop = 0;
-          }
-          // assemble
-          // IP
-          setupIPPacket(output);
+	    resp.numEntries = kk;
+            // assemble
+            // IP
+            setupIPPacket(output);
 
-          // Source
-          output[12] = dst_addr;
-          output[13] = dst_addr >> 8;
-          output[14] = dst_addr >> 16;
-          output[15] = dst_addr >> 24;
+            // Source
+            output[12] = dst_addr;
+            output[13] = dst_addr >> 8;
+            output[14] = dst_addr >> 16;
+            output[15] = dst_addr >> 24;
+  
+            // Destination
+            output[16] = src_addr;
+            output[17] = src_addr >> 8;
+            output[18] = src_addr >> 16;
+            output[19] = src_addr >> 24;
 
-          // Destination
-          output[16] = src_addr;
-          output[17] = src_addr >> 8;
-          output[18] = src_addr >> 16;
-          output[19] = src_addr >> 24;
+            // RIP
+            uint32_t rip_len = assemble(&resp, &output[20 + 8]);
 
-          // RIP
-          uint32_t rip_len = assemble(&resp, &output[20 + 8]);
+            // Total Length
+            output[2] = (rip_len+20+8) >> 8;
+            output[3] = rip_len+20+8;
 
-          // Total Length
-          output[2] = (rip_len+20+8) >> 8;
-          output[3] = rip_len+20+8;
+            // UDP len
+            output[24] = (rip_len+8) >> 8;
+            output[25] = rip_len+8;
 
-          // UDP len
-          output[24] = (rip_len+8) >> 8;
-          output[25] = rip_len+8;
+            // ip checksum
+            output[10] = 0x00;
+            output[11] = 0x00;
+            unsigned short answer = getChecksum(output, 0, 20);
+            output[10] = answer >> 8;
+            output[11] = answer;
 
-          // ip checksum
-          output[10] = 0x00;
-          output[11] = 0x00;
-          unsigned short answer = getChecksum(output, 0, 20);
-          output[10] = answer >> 8;
-          output[11] = answer;
-
-          // udp checksum
-          output[26] = 0x00;
-          output[27] = 0x00;
-          // answer = getUDPChecksum(output); // start from 8, add 12(part of IP), add 8(UDP), and data
-          // output[26] = answer >> 8;
-          // output[27] = answer;
-          // checksum calculation for ip and udp
-          // if you don't want to calculate udp checksum, set it to zero
-          // send it back
-          HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
-	        std::cout << "request send back to: " << src_addr << std::endl;
+            // udp checksum
+            output[26] = 0x00;
+            output[27] = 0x00;
+            // answer = getUDPChecksum(output); // start from 8, add 12(part of IP), add 8(UDP), and data
+            // output[26] = answer >> 8;
+            // output[27] = answer;
+            // checksum calculation for ip and udp
+            // if you don't want to calculate udp checksum, set it to zero
+            // send it back
+            HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
+	        //std::cout << "request send back to: " << src_addr << std::endl;
+	  }
         } else {
-          std::cout << "response: " << std::endl;
+          printf("response: \n");
+          
+          //cout << "response res: " << res << endl;
+          
           // 3a.2 response, ref. RFC2453 3.9.2
           // update routing table
           // new metric = ?
@@ -311,10 +362,14 @@ int main(int argc, char *argv[]) {
 
             rip.entries[i].metric = __builtin_bswap32(rip.entries[i].metric);
             uint32_t query_if_index, query_nexthop, query_metric;
-            bool tmp = query(rip.entries[i].addr, &query_nexthop, &query_if_index, &query_metric);
+            bool tmp = query_exact(rip.entries[i].addr, &query_nexthop, &query_if_index, &query_metric);
+            
+            //cout << "query: " << rip.entries[i].addr << endl;
+            
             if(rip.entries[i].metric+1 > 16 
             && src_addr != 0x0203a8c0 // reverse poisoning detection // && src_addr != 0x0204a8c0
-            && memcmp(&(rip.entries[i].nexthop), &query_nexthop, sizeof(uint32_t))) {
+            && src_addr != 0x0201a8c0
+	    && memcmp(&(rip.entries[i].nexthop), &query_nexthop, sizeof(uint32_t))) {
               rip.entries[i].metric++;
               RoutingTableEntry entry = toRoutingTableEntry(rip.entries[i], query_if_index, 0);
               update(false, entry); // delete route entry
@@ -462,12 +517,12 @@ int main(int argc, char *argv[]) {
             nexthop = dst_addr;
           }
           if (HAL_ArpGetMacAddress(dest_if, nexthop, dest_mac) == 0) {
-            std::cout << "after ARP: " << dest_if << " " << std::hex << nexthop << std::endl;
+            //std::cout << "after ARP: " << dest_if << " " << std::hex << nexthop << std::endl;
             // found
             memcpy(output, packet, res);
             // update ttl and checksum
-            std::cout << "forward status: " <<
-            forward(output, res) << std::endl;
+            
+            forward(output, res);
             // TODO: you might want to check ttl=0 case
             // 当TTL=0， 建议构造一个 ICMP Time Exceeded 返回给发送者
             if (output[8] == 0x00) {
@@ -491,7 +546,7 @@ int main(int argc, char *argv[]) {
               printf("IP TTL timeout for %x\n", src_addr);
             } else {
                 HAL_SendIPPacket(dest_if, output, res, dest_mac);
-                std::cout << "forware IP packet sent from " 
+                /*std::cout << "forware IP packet sent from " 
                 << std::dec << dest_if << " to addr:" << std::hex << dst_addr 
                 << " mac: " << std::hex 
                 << (int)dest_mac[0] << ":" 
@@ -500,6 +555,7 @@ int main(int argc, char *argv[]) {
                 << (int)dest_mac[3] << ":" 
                 << (int)dest_mac[4] << ":" 
                 << (int)dest_mac[5] << std::endl;
+                */
             }
           } else {
             // not found

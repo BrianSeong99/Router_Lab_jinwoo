@@ -82,6 +82,26 @@ bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index, uint32_t *metri
   }
 }
 
+bool query_exact(uint32_t addr, uint32_t *nexthop, uint32_t *if_index, uint32_t *metric) {
+  std::string addr_str = toHex((int)addr);
+  int max = -1, max_i = -1;
+  for (int i=0; i<routers.size(); i++) {
+    std::string tmp = toHex((int)routers.at(i).addr);
+    if (addr_str == tmp) {
+      max = tmp.length();
+      max_i = i;
+    }
+  }
+  if (max_i != -1) {
+    *nexthop = routers.at(max_i).nexthop;
+    *if_index = routers.at(max_i).if_index;
+    *metric = routers.at(max_i).metric;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 std::vector<RoutingTableEntry> getRoutingTable() {
   return routers;
 }
