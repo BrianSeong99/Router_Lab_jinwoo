@@ -116,11 +116,11 @@ int main(int argc, char *argv[]) {
       std::vector<RoutingTableEntry> routers = getRoutingTable();
       // send new routing table to all ports
       for(int i=0; i<N_IFACE_ON_BOARD; i++) {
-	for (int routeIndex = 0; routeIndex < routers.size(); routeIndex+=25) { 
+	      for (int routeIndex = 0; routeIndex < routers.size(); routeIndex+=25) { 
           RipPacket ripPacket_o;
           //ripPacket_o.numEntries = routers.size();
           ripPacket_o.command = 2;
-	  int j, kk;
+	        int j, kk;
           for (j=routeIndex, kk = 0; j<(routers.size() < routeIndex+25 ? routers.size() : routeIndex+25); j++, kk++) {
             if (routers.at(j).nexthop != 0 && routers.at(j).if_index == i) {
               ripPacket_o.entries[kk] = toRipEntry(routers.at(j), 16);
@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
             // ripPacket_o.entries[i].metric = __builtin_bswap32(ripPacket_o.entries[i].metric);
             // std::cout << "30: entries[i].metric: " << routers.at(i).metric << " " << ripPacket_o.entries[i].metric << std::endl;
           }
-	  ripPacket_o.numEntries = kk;
+	        ripPacket_o.numEntries = kk;
 
           // assemble
           setupIPPacket(output);
